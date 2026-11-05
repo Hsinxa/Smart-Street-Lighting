@@ -15,14 +15,18 @@
   Red LED anode -> D5 through 220 ohm resistor; cathode -> GND
   Active buzzer (+) -> D6, (-) -> GND
 
-  The sensor measures the distance from itself to the water surface.
-  As the water rises, this distance gets smaller.
-
   IMPORTANT:
-  The warning and danger thresholds are preserved exactly:
   WARNING = 30 cm
   DANGER  = 12 cm
   These are demonstration settings, not universal flood-safety limits.
+
+  Reliability updates:
+  - Median filter over the latest three valid distance samples.
+  - Reject out-of-range and missing-echo measurements.
+  - Require at least two valid samples in the filter window.
+  - Buzzer is ALWAYS OFF during SENSOR ERROR.
+  - Sensor error is shown by a blinking yellow LED only.
+  - Alarm and sampling are non-blocking.
 */
 
 const byte TRIG_PIN = 9;
@@ -33,26 +37,25 @@ const byte YELLOW_LED_PIN = 4;
 const byte RED_LED_PIN = 5;
 const byte BUZZER_PIN = 6;
 
-// Preserved exactly as requested.
 const float WARNING_DISTANCE_CM = 30.0f;
 const float DANGER_DISTANCE_CM = 12.0f;
 
-// 3000 us gives a theoretical range of about 51 cm.
-// It keeps each measurement quick while covering both thresholds.
 const unsigned long ECHO_TIMEOUT_US = 3000UL;
 const unsigned long SAMPLE_INTERVAL_MS = 100UL;
 
-// Non-blocking danger alarm: 100 ms ON in each 300 ms cycle.
 const unsigned long ALARM_CYCLE_MS = 300UL;
 const unsigned long ALARM_ON_MS = 100UL;
+const unsigned long ERROR_BLINK_MS = 500UL;
 
-// Non-blocking sensor-fault indicator.
-const unsigned long ERROR_CYCLE_MS = 1000UL;
-const unsigned long ERROR_BEEP_MS = 70UL;
+const float MIN_VALID_DISTANCE_CM = 2.0f;
+const float MAX_VALID_DISTANCE_CM = 400.0f;
+
+float samples[3] = {0.0f, 0.0f, 0.0f};
+byte sampleCount = 0;
+byte nextSampleIndex = 0;
 
 unsigned long lastSampleTime = 0;
 unsigned long alarmCycleStart = 0;
-unsigned long errorCycleStart = 0;
 
 enum SystemState : byte {
   STATE_NORMAL,
@@ -64,25 +67,61 @@ enum SystemState : byte {
 SystemState currentState = STATE_SENSOR_ERROR;
 
 float readDistanceCm() {
-  // Start with a clean trigger pulse.
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
 
-  // Trigger the HC-SR04.
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  // A short timeout prevents a long wait when no echo is received.
-  const unsigned long duration =
-      pulseIn(ECHO_PIN, HIGH, ECHO_TIMEOUT_US);
+  const unsigned long duration = pulseIn(ECHO_PIN, HIGH, ECHO_TIMEOUT_US);
 
   if (duration == 0UL) {
     return -1.0f;
   }
 
-  // Sound travels to the water and back, so divide by two.
-  return (duration * 0.0343f) / 2.0f;
+  const float distance = (duration * 0.0343f) / 2.0f;
+
+  if (distance < MIN_VALID_DISTANCE_CM ||
+      distance > MAX_VALID_DISTANCE_CM) {
+    return -1.0f;
+  }
+
+  return distance;
+}
+
+float filteredDistanceCm() {
+  if (sampleCount < 2) {
+    return -1.0f;
+  }
+
+  if (sampleCount == 2) {
+    return (samples[0] + samples[1]) / 2.0f;
+  }
+
+  // Median of three values, robust against one unusually high/low reading.
+  float a = samples[0];
+  float b = samples[1];
+  float c = samples[2];
+
+  if (a > b) { const float t = a; a = b; b = t; }
+  if (b > c) { const float t = b; b = c; c = t; }
+  if (a > b) { const float t = a; a = b; b = t; }
+
+  return b;
+}
+
+void addSample(float distanceCm) {
+  if (distanceCm < 0.0f) {
+    return;
+  }
+
+  samples[nextSampleIndex] = distanceCm;
+  nextSampleIndex = (nextSampleIndex + 1) % 3;
+
+  if (sampleCount < 3) {
+    sampleCount++;
+  }
 }
 
 void applyStateIndicators(unsigned long now) {
@@ -110,33 +149,32 @@ void applyStateIndicators(unsigned long now) {
         alarmCycleStart = now;
       }
 
-      const bool buzzerOn =
-          (now - alarmCycleStart) < ALARM_ON_MS;
+      const bool buzzerOn = (now - alarmCycleStart) < ALARM_ON_MS;
       digitalWrite(BUZZER_PIN, buzzerOn ? HIGH : LOW);
       break;
     }
 
-    case STATE_SENSOR_ERROR: {
+    case STATE_SENSOR_ERROR:
       digitalWrite(GREEN_LED_PIN, LOW);
       digitalWrite(RED_LED_PIN, LOW);
-
-      if (now - errorCycleStart >= ERROR_CYCLE_MS) {
-        errorCycleStart = now;
-      }
-
-      const unsigned long phase = now - errorCycleStart;
       digitalWrite(YELLOW_LED_PIN,
-                   phase < 500UL ? HIGH : LOW);
-      digitalWrite(BUZZER_PIN,
-                   phase < ERROR_BEEP_MS ? HIGH : LOW);
+                   ((now / ERROR_BLINK_MS) % 2) == 0 ? HIGH : LOW);
+      // Critical: a missing/invalid sensor reading must never sound the
+      // flood danger alarm.
+      digitalWrite(BUZZER_PIN, LOW);
       break;
-    }
   }
 }
 
 void printState(float distanceCm) {
   Serial.print(F("Distance: "));
-  Serial.print(distanceCm, 1);
+
+  if (distanceCm < 0.0f) {
+    Serial.print(F("--"));
+  } else {
+    Serial.print(distanceCm, 1);
+  }
+
   Serial.print(F(" cm | "));
 
   switch (currentState) {
@@ -167,10 +205,10 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
 
   digitalWrite(TRIG_PIN, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
 
   const unsigned long now = millis();
   alarmCycleStart = now;
-  errorCycleStart = now;
   applyStateIndicators(now);
 
   Serial.println(F("======================================"));
@@ -179,13 +217,13 @@ void setup() {
   Serial.println(F("======================================"));
   Serial.println(F("Monitoring water surface distance..."));
   Serial.println(F("Warning: 30 cm | Danger: 12 cm"));
-  Serial.println(F("Smaller distance means a higher level."));
+  Serial.println(F("Filter: median of latest 3 valid samples"));
+  Serial.println(F("Sensor error: yellow blink; buzzer OFF"));
 }
 
 void loop() {
   const unsigned long now = millis();
 
-  // Update alarm patterns continuously without using delay().
   applyStateIndicators(now);
 
   if (now - lastSampleTime < SAMPLE_INTERVAL_MS) {
@@ -193,16 +231,19 @@ void loop() {
   }
   lastSampleTime = now;
 
-  const float distanceCm = readDistanceCm();
+  const float rawDistance = readDistanceCm();
+  addSample(rawDistance);
+
+  const float distanceCm = filteredDistanceCm();
 
   if (distanceCm < 0.0f) {
     currentState = STATE_SENSOR_ERROR;
-    printState(0.0f);
+    digitalWrite(BUZZER_PIN, LOW);
+    printState(-1.0f);
     applyStateIndicators(millis());
     return;
   }
 
-  // Thresholds and comparison directions are unchanged.
   if (distanceCm <= DANGER_DISTANCE_CM) {
     if (currentState != STATE_DANGER) {
       alarmCycleStart = millis();
