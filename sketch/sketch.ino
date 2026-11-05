@@ -7,7 +7,6 @@
   - HC-SR04 ultrasonic sensor
   - Green, yellow and red LEDs (each with a 220 ohm resistor)
   - Active buzzer
-  - Breadboard and jumper wires
 
   Wiring:
   HC-SR04: TRIG -> D9, ECHO -> D10, VCC -> 5V, GND -> GND
@@ -20,8 +19,10 @@
   As the water rises, this distance gets smaller.
 
   IMPORTANT:
-  The thresholds below are example distances from the sensor to the
-  water surface. Adjust them for your demonstration tank after testing.
+  The warning and danger thresholds are preserved exactly:
+  WARNING = 30 cm
+  DANGER  = 12 cm
+  These are demonstration settings, not universal flood-safety limits.
 */
 
 const byte TRIG_PIN = 9;
@@ -32,44 +33,126 @@ const byte YELLOW_LED_PIN = 4;
 const byte RED_LED_PIN = 5;
 const byte BUZZER_PIN = 6;
 
-// Example thresholds, measured from the sensor down to the water.
-// Greater distance = lower water. Smaller distance = higher water.
-const float WARNING_DISTANCE_CM = 30.0;
-const float DANGER_DISTANCE_CM = 12.0;
+// Preserved exactly as requested.
+const float WARNING_DISTANCE_CM = 30.0f;
+const float DANGER_DISTANCE_CM = 12.0f;
 
+// 3000 us gives a theoretical range of about 51 cm.
+// It keeps each measurement quick while covering both thresholds.
 const unsigned long ECHO_TIMEOUT_US = 3000UL;
-const unsigned long SAMPLE_INTERVAL_MS = 250UL;
+const unsigned long SAMPLE_INTERVAL_MS = 100UL;
+
+// Non-blocking danger alarm: 100 ms ON in each 300 ms cycle.
+const unsigned long ALARM_CYCLE_MS = 300UL;
+const unsigned long ALARM_ON_MS = 100UL;
+
+// Non-blocking sensor-fault indicator.
+const unsigned long ERROR_CYCLE_MS = 1000UL;
+const unsigned long ERROR_BEEP_MS = 70UL;
 
 unsigned long lastSampleTime = 0;
+unsigned long alarmCycleStart = 0;
+unsigned long errorCycleStart = 0;
+
+enum SystemState : byte {
+  STATE_NORMAL,
+  STATE_WARNING,
+  STATE_DANGER,
+  STATE_SENSOR_ERROR
+};
+
+SystemState currentState = STATE_SENSOR_ERROR;
 
 float readDistanceCm() {
-  // Ensure a clean trigger pulse.
+  // Start with a clean trigger pulse.
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
 
-  // Send an ultrasonic pulse (10 microseconds).
+  // Trigger the HC-SR04.
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  // Measure the echo pulse duration. A timeout prevents the code
-  // from waiting indefinitely if no echo is received.
-  unsigned long duration = pulseIn(ECHO_PIN, HIGH, ECHO_TIMEOUT_US);
+  // A short timeout prevents a long wait when no echo is received.
+  const unsigned long duration =
+      pulseIn(ECHO_PIN, HIGH, ECHO_TIMEOUT_US);
 
-  if (duration == 0) {
-    return -1.0; // No valid echo.
+  if (duration == 0UL) {
+    return -1.0f;
   }
 
-  // Speed of sound is approximately 0.0343 cm per microsecond.
-  // Divide by 2 because the sound travels to the water and back.
+  // Sound travels to the water and back, so divide by two.
   return (duration * 0.0343f) / 2.0f;
 }
 
-void setIndicators(bool green, bool yellow, bool red, bool buzzer) {
-  digitalWrite(GREEN_LED_PIN, green ? HIGH : LOW);
-  digitalWrite(YELLOW_LED_PIN, yellow ? HIGH : LOW);
-  digitalWrite(RED_LED_PIN, red ? HIGH : LOW);
-  digitalWrite(BUZZER_PIN, buzzer ? HIGH : LOW);
+void applyStateIndicators(unsigned long now) {
+  switch (currentState) {
+    case STATE_NORMAL:
+      digitalWrite(GREEN_LED_PIN, HIGH);
+      digitalWrite(YELLOW_LED_PIN, LOW);
+      digitalWrite(RED_LED_PIN, LOW);
+      digitalWrite(BUZZER_PIN, LOW);
+      break;
+
+    case STATE_WARNING:
+      digitalWrite(GREEN_LED_PIN, LOW);
+      digitalWrite(YELLOW_LED_PIN, HIGH);
+      digitalWrite(RED_LED_PIN, LOW);
+      digitalWrite(BUZZER_PIN, LOW);
+      break;
+
+    case STATE_DANGER: {
+      digitalWrite(GREEN_LED_PIN, LOW);
+      digitalWrite(YELLOW_LED_PIN, LOW);
+      digitalWrite(RED_LED_PIN, HIGH);
+
+      if (now - alarmCycleStart >= ALARM_CYCLE_MS) {
+        alarmCycleStart = now;
+      }
+
+      const bool buzzerOn =
+          (now - alarmCycleStart) < ALARM_ON_MS;
+      digitalWrite(BUZZER_PIN, buzzerOn ? HIGH : LOW);
+      break;
+    }
+
+    case STATE_SENSOR_ERROR: {
+      digitalWrite(GREEN_LED_PIN, LOW);
+      digitalWrite(RED_LED_PIN, LOW);
+
+      if (now - errorCycleStart >= ERROR_CYCLE_MS) {
+        errorCycleStart = now;
+      }
+
+      const unsigned long phase = now - errorCycleStart;
+      digitalWrite(YELLOW_LED_PIN,
+                   phase < 500UL ? HIGH : LOW);
+      digitalWrite(BUZZER_PIN,
+                   phase < ERROR_BEEP_MS ? HIGH : LOW);
+      break;
+    }
+  }
+}
+
+void printState(float distanceCm) {
+  Serial.print(F("Distance: "));
+  Serial.print(distanceCm, 1);
+  Serial.print(F(" cm | "));
+
+  switch (currentState) {
+    case STATE_NORMAL:
+      Serial.println(F("NORMAL"));
+      break;
+    case STATE_WARNING:
+      Serial.println(F("WARNING - Water level rising"));
+      break;
+    case STATE_DANGER:
+      Serial.println(F("DANGER - High water level"));
+      break;
+    case STATE_SENSOR_ERROR:
+      Serial.println(F("SENSOR ERROR - Check sensor and wiring"));
+      break;
+  }
 }
 
 void setup() {
@@ -84,43 +167,53 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
 
   digitalWrite(TRIG_PIN, LOW);
-  setIndicators(false, false, false, false);
+
+  const unsigned long now = millis();
+  alarmCycleStart = now;
+  errorCycleStart = now;
+  applyStateIndicators(now);
 
   Serial.println(F("======================================"));
-  Serial.println(F("       JALRAKSHAK FLOOD WARNING        "));
-  Serial.println(F("       Computer Exhibition 2026       "));
+  Serial.println(F("       JALRAKSHAK FLOOD WARNING       "));
+  Serial.println(F("       Computer Exhibition 2026      "));
   Serial.println(F("======================================"));
   Serial.println(F("Monitoring water surface distance..."));
+  Serial.println(F("Warning: 30 cm | Danger: 12 cm"));
   Serial.println(F("Smaller distance means a higher level."));
 }
 
 void loop() {
-  if (millis() - lastSampleTime < SAMPLE_INTERVAL_MS) {
+  const unsigned long now = millis();
+
+  // Update alarm patterns continuously without using delay().
+  applyStateIndicators(now);
+
+  if (now - lastSampleTime < SAMPLE_INTERVAL_MS) {
     return;
   }
-  lastSampleTime = millis();
+  lastSampleTime = now;
 
-  float distanceCm = readDistanceCm();
+  const float distanceCm = readDistanceCm();
 
   if (distanceCm < 0.0f) {
-    // Sensor did not receive an echo. Do not report a false normal reading.
-    setIndicators(false, false, false, false);
-    Serial.println(F("SENSOR ERROR: No echo received. Check sensor and wiring."));
+    currentState = STATE_SENSOR_ERROR;
+    printState(0.0f);
+    applyStateIndicators(millis());
     return;
   }
 
-  Serial.print(F("Distance to water: "));
-  Serial.print(distanceCm, 1);
-  Serial.print(F(" cm | "));
-
+  // Thresholds and comparison directions are unchanged.
   if (distanceCm <= DANGER_DISTANCE_CM) {
-    setIndicators(false, false, true, true);
-    Serial.println(F("DANGER - High water level!"));
+    if (currentState != STATE_DANGER) {
+      alarmCycleStart = millis();
+    }
+    currentState = STATE_DANGER;
   } else if (distanceCm <= WARNING_DISTANCE_CM) {
-    setIndicators(false, true, false, false);
-    Serial.println(F("WARNING - Water level is rising."));
+    currentState = STATE_WARNING;
   } else {
-    setIndicators(true, false, false, false);
-    Serial.println(F("NORMAL - Water level is below warning threshold."));
+    currentState = STATE_NORMAL;
   }
+
+  printState(distanceCm);
+  applyStateIndicators(millis());
 }
