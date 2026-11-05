@@ -1,0 +1,11 @@
+[wokwi]
+version = 1
+# Path to the compiled binary (.hex for Arduino Uno / AVR, .bin for ESP32/RP2040)
+firmware = "build/sketch.ino.hex"
+elf = "build/sketch.ino.elf"
+
+# Note:
+# If you are using PlatformIO instead of Arduino CLI/IDE, change the paths above to:
+# firmware = ".pio/build/uno/firmware.hex"
+# elf = ".pio/build/uno/firmware.elf"
+
