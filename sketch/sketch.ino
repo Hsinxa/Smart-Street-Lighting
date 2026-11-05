@@ -34,10 +34,10 @@ const byte BUZZER_PIN = 6;
 
 // Example thresholds, measured from the sensor down to the water.
 // Greater distance = lower water. Smaller distance = higher water.
-const float WARNING_DISTANCE_CM = 12.0;
-const float DANGER_DISTANCE_CM = 5.0;
+const float WARNING_DISTANCE_CM = 30.0;
+const float DANGER_DISTANCE_CM = 12.0;
 
-const unsigned long ECHO_TIMEOUT_US = 30000UL;
+const unsigned long ECHO_TIMEOUT_US = 3000UL;
 const unsigned long SAMPLE_INTERVAL_MS = 250UL;
 
 unsigned long lastSampleTime = 0;
