@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "author": "Computer Exhibition 2026",
+  "author": "HSINXA | Computer Exhibition 2026",
   "editor": "wokwi",
   "parts": [
     {
@@ -16,7 +16,7 @@
       "top": 60,
       "left": -60,
       "attrs": {
-        "label": "IR Sensor 1 (Entry)",
+        "label": "Entry PIR Motion Sensor",
         "delayTime": "3"
       }
     },
@@ -26,7 +26,7 @@
       "top": 60,
       "left": 640,
       "attrs": {
-        "label": "IR Sensor 2 (Exit)",
+        "label": "Exit PIR Motion Sensor",
         "delayTime": "3"
       }
     },
@@ -84,18 +84,14 @@
     [ "pir1:VCC", "uno:5V", "red", [ "v0" ] ],
     [ "pir1:GND", "uno:GND.1", "black", [ "v0" ] ],
     [ "pir1:OUT", "uno:2", "blue", [ "v0" ] ],
-
     [ "pir2:VCC", "uno:5V", "red", [ "v0" ] ],
     [ "pir2:GND", "uno:GND.1", "black", [ "v0" ] ],
     [ "pir2:OUT", "uno:3", "cyan", [ "v0" ] ],
-
     [ "uno:6", "r1:1", "orange", [ "v0" ] ],
-
     [ "r1:2", "led1:A", "gold", [ "v0" ] ],
     [ "led1:A", "led2:A", "gold", [ "v0" ] ],
     [ "led2:A", "led3:A", "gold", [ "v0" ] ],
     [ "led3:A", "led4:A", "gold", [ "v0" ] ],
-
     [ "uno:GND.2", "led1:C", "black", [ "v0" ] ],
     [ "led1:C", "led2:C", "black", [ "v0" ] ],
     [ "led2:C", "led3:C", "black", [ "v0" ] ],
