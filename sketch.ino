@@ -1,65 +1,89 @@
-// Smart Street Light Project
-// Computer Exhibition 2026
-// Arduino Uno + 2 IR Sensors + 4 Street Light LEDs
+/*
+  HSINXA Smart Street Lighting
+  Version: 1.1
+  Board: Arduino Uno
+  Inputs: Two PIR motion sensors
+  Output: Four existing street-light LEDs on the shared output line
 
-// Pin configuration
-const int streetLightsPin = 6;  // Controls the 4 LEDs
-const int sensor1Pin = 2;       // Entry IR motion sensor
-const int sensor2Pin = 3;       // Exit IR motion sensor
+  Hardware scope:
+  - Keeps the existing Arduino Uno and sensor/LED components.
+  - Keeps the existing LED wiring arrangement unchanged by decision.
+  - The LED wiring arrangement is a known limitation and is not certified
+    for a physical installation by this software update.
+*/
 
-// Settings
-const unsigned long onTime = 5000;  // Keep lights on for 5 seconds after motion
+const byte STREET_LIGHTS_PIN = 6;
+const byte SENSOR_ENTRY_PIN = 2;
+const byte SENSOR_EXIT_PIN = 3;
 
-unsigned long lastTriggerTime = 0;
-bool lightsOn = false;
+const unsigned long LIGHT_HOLD_TIME_MS = 5000UL;
+
+unsigned long lastMotionTime = 0;
+bool lightsAreOn = false;
+
+bool previousEntryState = LOW;
+bool previousExitState = LOW;
+
+void setStreetLights(bool turnOn) {
+  if (turnOn == lightsAreOn) {
+    return;
+  }
+
+  digitalWrite(STREET_LIGHTS_PIN, turnOn ? HIGH : LOW);
+  lightsAreOn = turnOn;
+
+  if (turnOn) {
+    Serial.println(F("Motion detected: street lights ON."));
+  } else {
+    Serial.println(F("Area clear for 5 seconds: street lights OFF."));
+  }
+}
+
+void logSensorChanges(bool entryActive, bool exitActive) {
+  if (entryActive != previousEntryState) {
+    Serial.print(F("Entry sensor: "));
+    Serial.println(entryActive ? F("MOTION") : F("clear"));
+    previousEntryState = entryActive;
+  }
+
+  if (exitActive != previousExitState) {
+    Serial.print(F("Exit sensor: "));
+    Serial.println(exitActive ? F("MOTION") : F("clear"));
+    previousExitState = exitActive;
+  }
+}
 
 void setup() {
+  pinMode(STREET_LIGHTS_PIN, OUTPUT);
+  pinMode(SENSOR_ENTRY_PIN, INPUT);
+  pinMode(SENSOR_EXIT_PIN, INPUT);
+
+  digitalWrite(STREET_LIGHTS_PIN, LOW);
+
   Serial.begin(9600);
+  Serial.println(F("--------------------------------"));
+  Serial.println(F("HSINXA Smart Street Lighting v1.1"));
+  Serial.println(F("Arduino Uno | 2 PIR sensors"));
+  Serial.println(F("Waiting for motion..."));
+  Serial.println(F("--------------------------------"));
 
-  pinMode(streetLightsPin, OUTPUT);
-  pinMode(sensor1Pin, INPUT);
-  pinMode(sensor2Pin, INPUT);
-
-  // Start with lights turned off
-  digitalWrite(streetLightsPin, LOW);
-
-  Serial.println("Smart Street Light System Started");
-  Serial.println("Waiting for cars to pass by...");
+  previousEntryState = digitalRead(SENSOR_ENTRY_PIN);
+  previousExitState = digitalRead(SENSOR_EXIT_PIN);
 }
 
 void loop() {
-  // Read both IR motion sensors
-  int sensor1 = digitalRead(sensor1Pin);
-  int sensor2 = digitalRead(sensor2Pin);
+  const unsigned long now = millis();
 
-  unsigned long currentMillis = millis();
+  const bool entryActive = (digitalRead(SENSOR_ENTRY_PIN) == HIGH);
+  const bool exitActive = (digitalRead(SENSOR_EXIT_PIN) == HIGH);
+  const bool motionDetected = entryActive || exitActive;
 
-  // If either sensor spots a car
-  if (sensor1 == HIGH || sensor2 == HIGH) {
-    lastTriggerTime = currentMillis;
+  logSensorChanges(entryActive, exitActive);
 
-    if (!lightsOn) {
-      digitalWrite(streetLightsPin, HIGH);
-      lightsOn = true;
-
-      if (sensor1 == HIGH && sensor2 == HIGH) {
-        Serial.println("Motion detected on both sensors!");
-      } else if (sensor1 == HIGH) {
-        Serial.println("Car detected at Entry (Sensor 1) -> Turning lights ON");
-      } else {
-        Serial.println("Car detected at Exit (Sensor 2) -> Turning lights ON");
-      }
-    }
+  if (motionDetected) {
+    lastMotionTime = now;
+    setStreetLights(true);
+  } else if (lightsAreOn && (now - lastMotionTime >= LIGHT_HOLD_TIME_MS)) {
+    setStreetLights(false);
   }
-
-  // Turn lights off after 5 seconds of no motion
-  if (lightsOn && (currentMillis - lastTriggerTime >= onTime)) {
-    if (sensor1 == LOW && sensor2 == LOW) {
-      digitalWrite(streetLightsPin, LOW);
-      lightsOn = false;
-      Serial.println("No more cars detected. Turning lights OFF to save power.");
-    }
-  }
-
-  delay(50);
 }
