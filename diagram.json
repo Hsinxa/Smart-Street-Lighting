@@ -6,15 +6,35 @@
     {
       "type": "board-arduino-uno",
       "id": "uno",
-      "top": 100,
-      "left": 100,
+      "top": 300,
+      "left": 200,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir1",
+      "top": 60,
+      "left": -60,
+      "attrs": {
+        "label": "IR Sensor 1 (Entry)",
+        "delayTime": "3"
+      }
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir2",
+      "top": 60,
+      "left": 640,
+      "attrs": {
+        "label": "IR Sensor 2 (Exit)",
+        "delayTime": "3"
+      }
     },
     {
       "type": "wokwi-resistor",
       "id": "r1",
-      "top": 220,
-      "left": 260,
+      "top": 240,
+      "left": 130,
       "attrs": {
         "value": "220"
       }
@@ -22,18 +42,64 @@
     {
       "type": "wokwi-led",
       "id": "led1",
-      "top": 150,
-      "left": 280,
+      "top": 120,
+      "left": 130,
       "attrs": {
-        "color": "red"
+        "color": "yellow",
+        "label": "Street Lamp 1"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led2",
+      "top": 120,
+      "left": 250,
+      "attrs": {
+        "color": "yellow",
+        "label": "Street Lamp 2"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led3",
+      "top": 120,
+      "left": 370,
+      "attrs": {
+        "color": "yellow",
+        "label": "Street Lamp 3"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led4",
+      "top": 120,
+      "left": 490,
+      "attrs": {
+        "color": "yellow",
+        "label": "Street Lamp 4"
       }
     }
   ],
   "connections": [
-    [ "uno:GND.1", "r1:1", "black", [ "v0" ] ],
-    [ "r1:2", "led1:C", "black", [ "v0" ] ],
-    [ "uno:13", "led1:A", "green", [ "v0" ] ]
+    [ "pir1:VCC", "uno:5V", "red", [ "v0" ] ],
+    [ "pir1:GND", "uno:GND.1", "black", [ "v0" ] ],
+    [ "pir1:OUT", "uno:2", "blue", [ "v0" ] ],
+
+    [ "pir2:VCC", "uno:5V", "red", [ "v0" ] ],
+    [ "pir2:GND", "uno:GND.1", "black", [ "v0" ] ],
+    [ "pir2:OUT", "uno:3", "cyan", [ "v0" ] ],
+
+    [ "uno:6", "r1:1", "orange", [ "v0" ] ],
+
+    [ "r1:2", "led1:A", "gold", [ "v0" ] ],
+    [ "led1:A", "led2:A", "gold", [ "v0" ] ],
+    [ "led2:A", "led3:A", "gold", [ "v0" ] ],
+    [ "led3:A", "led4:A", "gold", [ "v0" ] ],
+
+    [ "uno:GND.2", "led1:C", "black", [ "v0" ] ],
+    [ "led1:C", "led2:C", "black", [ "v0" ] ],
+    [ "led2:C", "led3:C", "black", [ "v0" ] ],
+    [ "led3:C", "led4:C", "black", [ "v0" ] ]
   ],
   "dependencies": {}
 }
-

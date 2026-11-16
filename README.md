@@ -1,45 +1,50 @@
-# Arduino Simulation Project with Wokwi
+# Smart Street Light System
 
-This project is set up to simulate an **Arduino Uno** using the **Wokwi Simulator** extension in Antigravity / VS Code.
+A working model of an automated, energy-saving street lighting system for the 2026 Computer Exhibition. 
 
----
-
-## 📁 Project Structure
-
-- [sketch.ino](file:///c:/Users/Pulkit/Desktop/Computer%20Exhibition%202026/sketch.ino): Arduino starter code (Blinks Pin 13 LED and outputs serial telemetry at 115200 baud).
-- [diagram.json](file:///c:/Users/Pulkit/Desktop/Computer%20Exhibition%202026/diagram.json): Virtual hardware circuit diagram (Arduino Uno connected to a red LED and a 220Ω current-limiting resistor).
-- [wokwi.toml](file:///c:/Users/Pulkit/Desktop/Computer%20Exhibition%202026/wokwi.toml): Wokwi configuration file mapping the simulator to the compiled binary (`build/sketch.ino.hex`).
-- [.vscode/extensions.json](file:///c:/Users/Pulkit/Desktop/Computer%20Exhibition%202026/.vscode/extensions.json): Workspace recommended extensions (`wokwi.wokwi-vscode`).
-- [.vscode/arduino.json](file:///c:/Users/Pulkit/Desktop/Computer%20Exhibition%202026/.vscode/arduino.json): Arduino board configuration (`arduino:avr:uno`, build output directory).
-- [.vscode/tasks.json](file:///c:/Users/Pulkit/Desktop/Computer%20Exhibition%202026/.vscode/tasks.json): Build task for `arduino-cli`.
+The system uses an Arduino Uno, two IR motion sensors, and four street lights (LEDs). The lights automatically switch on whenever a car enters either end of the road, and turn off once the vehicle passes to conserve power.
 
 ---
 
-## 🚀 Setup & Running Instructions
+## Components Used
 
-### 1. Install Wokwi Extension
-1. Open the Extensions sidebar (`Ctrl + Shift + X`).
-2. Search for **Wokwi Simulator** (`wokwi.wokwi-vscode`).
-3. Click **Install**.
+- **Arduino Uno**
+- **4x LEDs** (acting as street lights along the road)
+- **1x 220Ω Resistor**
+- **2x IR / PIR Motion Sensors** (one for entry, one for exit)
+- Breadboard & jumper wires
 
-### 2. Request / Activate Wokwi License
-1. Press `Ctrl + Shift + P` (or `F1`) to open the Command Palette.
-2. Type `Wokwi: Request Free Trial` or `Wokwi: Sign in to Wokwi Club`.
-3. Follow the browser prompt to obtain and paste your license key (if prompted).
+---
 
-### 3. Compile the Code
-Wokwi simulates the compiled binary (`.hex` file):
-- **Option A (Arduino IDE / CLI)**:
-  Run in terminal:
-  ```powershell
-  arduino-cli compile --fqbn arduino:avr:uno --output-dir build sketch.ino
-  ```
-  *(Or press `Ctrl + Shift + B` to trigger the default build task if `arduino-cli` is in your PATH)*.
-- **Option B (PlatformIO)**:
-  If you use PlatformIO, update `wokwi.toml` firmware path to `.pio/build/uno/firmware.hex` and click Build.
+## Pin Connections
 
-### 4. Start the Simulator
-- Open [diagram.json](file:///c:/Users/Pulkit/Desktop/Computer%20Exhibition%202026/diagram.json) and click the green **Play** button at the top-right of the diagram editor.
-- OR press `Ctrl + Shift + P` and select **`Wokwi: Start Simulator`**.
-- The virtual Arduino board and LED will appear, along with the interactive Serial Monitor!
+| Component | Arduino Pin | Description |
+| :--- | :--- | :--- |
+| Street Lights (4 LEDs) | **Pin 6** | Positive line through the 220Ω resistor |
+| Ground (LEDs) | **GND** | Shared negative return line |
+| IR Sensor 1 (Entry) | **Pin 2** | Digital OUT pin |
+| IR Sensor 2 (Exit) | **Pin 3** | Digital OUT pin |
+| Sensor Power | **5V & GND** | Shared power rails for both sensors |
 
+> **Note on wiring the 4 LEDs:**  
+> Each LED has a forward voltage drop of roughly 1.8V to 2V. Putting four of them end-to-end in strict series would need around 7V to 8V, which is higher than the 5V an Arduino pin provides. To make sure all four lights turn on reliably at 5V, they are wired along a shared line from Pin 6 through the 220Ω resistor to ground.
+
+---
+
+## How It Works
+
+1. **Idle State**: The street lights stay off while there is no traffic on the road.
+2. **Vehicle Entry**: When a car approaches either sensor (Pin 2 or Pin 3), the sensor sends a `HIGH` signal to the Arduino.
+3. **Lights On**: The Arduino immediately sends power through Pin 6, turning on all four street lights.
+4. **Timer & Auto-off**: Every time motion is detected, the timer resets. Once a car has passed and no motion is sensed for 5 seconds, the lights turn back off.
+5. **Serial Monitor**: You can open the Serial Monitor (set to 9600 baud) to see live messages whenever a car is detected.
+
+---
+
+## How to Test in Wokwi
+
+1. Open `diagram.json`.
+2. Click the green **Play** button in the top right to start the simulation.
+3. Click on either motion sensor on the screen, then click **Simulate Motion**.
+4. You'll see all four yellow street lights turn on and messages appear in the serial console.
+5. After 5 seconds without clicking motion, the lights will turn off on their own.
